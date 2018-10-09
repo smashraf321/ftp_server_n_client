@@ -17,9 +17,10 @@
 #define LIST_CMD "LIST"
 #define RET_CMD "RET"
 #define OK_ACK "OK"
+#define DEBUG 0
 
 //declarations
-int readServer(int dataSock, struct sockaddr_in * data_addr,int fileOut, char * cmd, char * fileName);
+int readServer(int dataSock, struct sockaddr_in * data_addr,FILE *fileOut, char * cmd, char * fileName);
 
 int startCmdSocket(struct sockaddr_in * serv_addr);
 int startDataSocket(struct sockaddr_in * data_addr, char * cmd);
@@ -43,7 +44,6 @@ int main(int argc, char const *argv[])
     }
 
 
-    //create serverSock
 
 
 
@@ -51,9 +51,10 @@ int main(int argc, char const *argv[])
 
 
     char line[64] = {0};
-    //command loop
+    //user interaction loop
     while(!quit){
 
+        //create serverSock
         if((cmdSock = startCmdSocket(&server_addr)) <= 0)
         {
             perror("creating cmdSock");
@@ -76,8 +77,10 @@ int main(int argc, char const *argv[])
         int isRet = 0;
 
         char cmd[5];
+        char cmdStr[30];
         char fileName [20] = " ";
 
+        //while loop to process user command
         while(token!=NULL){
             //printf("command: %s\n",token);
 
@@ -93,9 +96,8 @@ int main(int argc, char const *argv[])
                     printf("Running ret\n");
                 }
                 else{
-                    printf("Invalid command quitting");
+                    printf("Invalid command quitting\n");
                     token = NULL;//set to escape loop
-                    //return 0;
                     quit = 1;
                     break;
                 }
@@ -112,130 +114,89 @@ int main(int argc, char const *argv[])
 
         }
 
-        if(isList==1)
+
+
+        //create command packet
+        if(isList == 1)
         {
-                                if((dataSock = startDataSocket(&data_addr,cmd))<0)
-                                {
-                                    perror("creating dataSock");
-                                    return -1;
-                                }
-                                //create packet to send
-                                char cmdStr[30];
-                                sprintf(cmdStr, "%s %d\r\n",cmd,NEW_PORT1);
-
-                                printf("command to be sent: %s\n",cmdStr);
-
-                                //send command packet
-                                //send acknologement
-                                write(cmdSock,cmdStr,sizeof(cmdStr));
-
-                                //wait for ok
-
-                                buff[0] = ' ';
-                                buff[1] = '\0';
-
-                                printf("\n buff now is: '%s' \n",buff);
-
-                                if( (bufLen = read(cmdSock,buff,sizeof(buff) ) ) < 0)
-                                {
-                                    perror("read");
-                                    return -1;
-                                }
-                                printf("\n WAITING FOR OK AND GOT: %s \n",buff);
-                                //check if server accepts command
-                                if(strcmp(buff,OK_ACK) != 0)
-                                {
-                                    printf("command not ok: %s\n",buff);
-                                    continue;
-                                }else{
-                                    printf("command ok\n");
-                                }
-
-                                buff[0] = ' ';
-                                buff[1] = '\0';
-
-                                printf("\n buff now is: '%s' \n",buff);
-
-                                //begin readings ls
-                                printf("\n--- start command ---\n");
-
-                                //use call server
-                                if(readServer(dataSock,&data_addr,0,cmd,fileName)<0){
-                                    perror("readserver");
-                                    exit(EXIT_FAILURE);
-                                }
-
-                                printf("\n--- end command ---\n");
-                                close(dataSock);
+            sprintf(cmdStr, "%s %d\r\n",cmd,NEW_PORT1);
         }
-        else if(isRet==1)
+        else if(isRet == 1)
         {
+            sprintf(cmdStr, "%s %s %d\r\n",cmd,fileName,NEW_PORT2);
+        }
+        else{
+            continue;//restart the user interaction loop
+        }
 
-                                if((dataSock = startDataSocket(&data_addr,cmd))<0)
-                                {
-                                    perror("creating dataSock");
-                                    return -1;
-                                }
-                                //create packet to send
-                                char cmdStr[30];
-                                sprintf(cmdStr, "%s %s %d\r\n",cmd,fileName,NEW_PORT2);
-
-                                printf("command to be sent: %s\n",cmdStr);
-
-                                //send command packet
-                                //send acknologement
-                                write(cmdSock,cmdStr,sizeof(cmdStr));
-
-                                //wait for ok
-
-                                buff[0] = ' ';
-                                buff[1] = '\0';
-
-                                printf("\n buff now is: '%s' \n",buff);
-
-                                if( (bufLen = read(cmdSock,buff,sizeof(buff) ) ) < 0)
-                                {
-                                    perror("read");
-                                    return -1;
-                                }
-                                printf("\n WAITING FOR OK AND GOT: %s \n",buff);
-                                //check if server accepts command
-                                if(strcmp(buff,OK_ACK) != 0)
-                                {
-                                    printf("command not ok: %s\n",buff);
-                                    continue;
-                                }else{
-                                    printf("command ok\n");
-                                }
-
-                                buff[0] = ' ';
-                                buff[1] = '\0';
-
-                                printf("\n buff now is: '%s' \n",buff);
-
-                                //begin readings ls
-                                printf("\n--- start command ---\n");
-
-                                //use call server
-                                if(readServer(dataSock,&data_addr,0,cmd,fileName)<0){
-                                    perror("readserver");
-                                    exit(EXIT_FAILURE);
-                                }
-
-                                printf("\n--- end command ---\n");
-                                close(dataSock);
+        //create data socket
+        if((dataSock = startDataSocket(&data_addr,cmd))<0)
+        {
+            perror("creating dataSock");
+            return -1;
+        }
 
 
+        printf("command to be sent: %s\n",cmdStr);
+
+        //send command packet
+        //write(cmdSock,cmdStr,sizeof(cmdStr));
+        if(send(cmdSock,cmdStr,strlen(cmdStr),0) != strlen(cmdStr)) {
+            perror("send cmd");
+            return -1;
+        }
+
+        //wait for ok
+
+        /*
+        buff[0] = ' ';
+        buff[1] = '\0';
+        */
+
+        //printf("\n buff now is: '%s' \n",buff);
+
+        if( (bufLen = read(cmdSock,buff,sizeof(buff) ) ) < 0)
+        {
+            perror("read");
+            return -1;
+        }
+
+        if(DEBUG)
+            printf("\n WAITING FOR OK AND GOT: '%s' \n",buff);
+        //check if server accepts command
+        if(strcmp(buff,OK_ACK) != 0)
+        {
+            printf("command not ok: %s\n",buff);
+            continue;
         }else{
-          printf("\n DON'T WASTE MY TIME!!!! \n");
+            printf("command ok\n");
         }
+
+        buff[0] = ' ';
+        buff[1] = '\0';
+
+        if(DEBUG)
+            printf("\n buff now is: '%s' \n",buff);
+
+        //call read server
+        printf("\n--- start command ---\n");
+
+        //use call server
+        if(readServer(dataSock,&data_addr,stdout,cmd,fileName)<0){
+            perror("readserver");
+            exit(EXIT_FAILURE);
+        }
+
+        printf("\n--- end command ---\n");
+        close(dataSock);
 
         close(cmdSock);
-    }
+
+    }//end user interaction loop
 
 
 
-
+    //close(cmdSock);
     return 0;
 }
 
@@ -345,10 +306,12 @@ int startDataSocket(struct sockaddr_in * data_addr, char * cmd){
 
     //assign address localhost:DEFAULT_DATA_PORT
     data_addr->sin_family = AF_INET;
+
     if(strcmp(cmd,LIST_CMD)==0)
-    data_addr->sin_port = htons(NEW_PORT1);
+        data_addr->sin_port = htons(NEW_PORT1);
     if(strcmp(cmd,RET_CMD)==0)
-    data_addr->sin_port = htons(NEW_PORT2);
+        data_addr->sin_port = htons(NEW_PORT2);
+
     data_addr->sin_addr.s_addr = INADDR_ANY;
 
     //force attacment to default data port
@@ -383,115 +346,98 @@ int startCmdSocket(struct sockaddr_in * serv_addr)
 
     return sock;
 }
-int readServer(int dataSock, struct sockaddr_in * data_addr, int fileOut, char * cmd, char * fileName)
+int readServer(int dataSock, struct sockaddr_in * data_addr, FILE *fileOut, char * cmd, char * fileName)
 {
     char buff[4096];
     char *ackStr = "ACK";
     char *doneStr = "DONE";
     int data_addr_len = sizeof(*data_addr);
-    int fd;
+    int isList = 0, isRet = 0;
 
     //set up data socket
     int new_socket;
 
-    printf("\n waiting for server to connect to me \n");
+    if(DEBUG)
+        printf("\n waiting for server to connect to me \n");
+
     if ( ( new_socket = accept(dataSock, (struct sockaddr *)data_addr, (socklen_t*)&data_addr_len) ) <0)
     {
         perror("accept");
         exit(EXIT_FAILURE);
     }
 
-    printf("\n server connected to me \n");
+    if(DEBUG)
+        printf("\n server connected to me \n");
     //start reading data
     int done = 0;
     int valread;
 
-      if(strcmp(cmd,LIST_CMD)==0)
-              {
-                while(!done)
-                {
-                                //read buffer
-                                if( (valread = read(new_socket,buff,sizeof(buff) ) ) < 0)
-                                {
-                                    perror("read");
-                                    return -1;
-                                }
+    if(strcmp(cmd,LIST_CMD)==0){
+        isList = 1;
+    }
 
-                                //print to fileOut
-                                if(write(fileOut,buff,valread) < valread){
-                                    perror("write");
-                                    return -1;
-                                }
+    //create file for RET comand
+    if(strcmp(cmd,RET_CMD)==0)
+    {
+        if(DEBUG)
+            printf("\n waiting for receiving and saving file '%s' \n",fileName);
 
-                                printf("read from server: %.*s\n",valread,buff);
-                                fflush(stdout);
+        fileOut = fopen(fileName, "w");
+        if(fileOut < 0)
+        {
+          printf("\n failed to open new file \n");
+          return -1;
+        }
+        isRet = 1;
+    }
 
-                                //send acknologement
-                                write(new_socket,ackStr,sizeof(ackStr));
-                                /*if(send(new_socket,ackStr,strlen(ackStr),0) != strlen(ackStr)) {
-                                    perror("send");
-                                    return -1;
-                                }*/
 
-                                //check if done .. valread == 0 ||
-                                if(valread == 0 || strcmp(buff, doneStr) == 0){
-                                    done = 1;
-                                    printf("client recieved done\n");
-                                    //continue;
-                                }
-                  }
-              }
-       if(strcmp(cmd,RET_CMD)==0)
-              {
-                    printf("\n waiting for receiving and saving file '%s' \n",fileName);
-
-                    fd = open(fileName, O_CREAT | O_RDWR | O_APPEND , S_IRUSR | S_IWUSR | S_IXUSR);
-                    if(fd < 0)
-                    {
-                      printf("\n failed to open new file \n");
-                      return -1;
-                    }
-
-                    while(!done)
-                    {
-                                printf("\n actually gonna receive and save file \n");
-
-                                if( (valread = read(new_socket,buff,sizeof(buff) ) ) < 0)
-                                {
-                                    perror("read");
-                                    return -1;
-                                }
-
-                                //print to fileOut
-                                if(write(fd,buff,valread) < valread){
-                                    perror("write");
-                                    return -1;
-                                }
-
-                                //printf("read from server: %.*s\n",valread,buff);
-                                //fflush(stdout);
-
-                                //send acknologement
-                                write(new_socket,ackStr,sizeof(ackStr));
-                                /*if(send(new_socket,ackStr,strlen(ackStr),0) != strlen(ackStr)) {
-                                    perror("send");
-                                    return -1;
-                                }*/
-
-                                //check if done .. valread == 0 ||
-                                if(valread == 0 || strcmp(buff, doneStr) == 0){
-                                    done = 1;
-                                    printf("client recieved done\n");
-                                    //continue;
-                                }
-
-                    }
-                    close (fd);
-
-              }
+    while(!done)
+    {
+        //read buffer
+        if( (valread = read(new_socket,buff,sizeof(buff) ) ) < 0)
+        {
+            perror("read");
+            return -1;
+        }
 
 
 
+        //printf("read from server: %.*s\n",valread,buff);
+        //printf("read %d bytes\n",valread);
+        //fflush(stdout);
+
+        //send acknologement
+        if(send(new_socket,ackStr,strlen(ackStr),0) != strlen(ackStr)) {
+            perror("send");
+            return -1;
+        }
+
+        //check if done .. valread == 0 ||
+        if(valread == 0 || strcmp(buff, doneStr) == 0){
+            done = 1;
+            if(DEBUG)
+                printf("%.*s<- not printed to file\nclient recieved done\n",valread,buff);
+            continue;
+        }
+
+        //print to stdout
+        if(isList || DEBUG)
+            fprintf(stdout, "%.*s",valread,buff);
+        //could be better solution to assign fileOut pointer
+        if(isRet){
+           fwrite(buff,sizeof(char),(size_t)valread,fileOut);
+           //fprintf(fileOut, "%.*s",valread,buff);
+        }
+    }
+
+    if(isRet)
+        printf("saved file as %s\n",fileName);
+
+    //close open file
+    if(strcmp(cmd,RET_CMD)==0){
+        fclose (fileOut);
+    }
     close(new_socket);
     return 0;
 }
